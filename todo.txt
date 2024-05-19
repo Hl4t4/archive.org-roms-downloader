@@ -1,0 +1,10 @@
+- Factorized to POO
+- Test Gradio
+- TKinter para gui
+- Django (?) Probably not
+- Option to delete downloaded file
+- Option to delete decompressed file
+- Select files to download
+- Filtering
+- Batch downloading
+- Pause/Resume function??

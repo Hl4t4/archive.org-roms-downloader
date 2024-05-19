@@ -1,0 +1,12 @@
+PS1 - 1793 files - 568.78GBs
+PS2 - 2145 files - 3145.89GBs
+PS3 - 1144 files - 8672.69GBs
+PSP - 660 files - 376.50GBs
+GameCube - 643 files - 477.90GBs
+Wii - 1458 files - 2183.14GBs
+WiiU - 197 files - 1416.37GBs
+Dreamcast - 305 files - 155.52GBs
+Saturn - 309 files - 108.84GBs
+Xbox - 810 files - 4784.71GBs
+Xbox360 - 810 files - 5340.94GBs
+Total space needed for the consoles = 27231.28GBs

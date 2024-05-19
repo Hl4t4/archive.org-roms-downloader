@@ -9,9 +9,66 @@ import os
 import subprocess
 from requests.adapters import HTTPAdapter, Retry
 import zipfile
+from datetime import datetime
+import pandas as pd
 
 MAX_PROCCESSES = 5
 CONSOLE = 'PS2'
+
+class Game ():
+    def __init__(self, name: str, url: str, size: float, update_time: datetime, console: str) -> None:
+        self.__name = name
+        self.__url = url
+        self.__size = size
+        self.__update_time = update_time
+        self.__console = console
+
+    @property
+    def name(self) -> str:
+        return self.__name
+    
+    @name.setter
+    def name(self, name:str) -> None:
+        self.__name = name
+    
+    @property
+    def url(self) -> str:
+        return self.__url
+    
+    @url.setter
+    def url(self, url:str) -> None:
+        self.__url = url
+    
+    @property
+    def size(self) -> str:
+        return self.__size
+    
+    @size.setter
+    def size(self, size:float) -> None:
+        self.__size = size
+    
+    @property
+    def update_time(self) -> str:
+        return self.__update_time
+    
+    @update_time.setter
+    def update_time(self, update_time:float) -> None:
+        self.__update_time = update_time
+    
+    @property
+    def console(self) -> str:
+        return self.__console
+    
+    @console.setter
+    def console(self, console:str) -> None:
+        self.__console = console
+
+    def __str__(self) -> str:
+        return f'The game {self.name} Console {self.console} - with a size {self.size}GB - url {self.url} - last updated {self.update_time}'
+    
+    def as_dict(self) -> dict:
+        return {'file_name' : self.name, 'console' : self.console, 'file_size' : self.size, 'url' : self.url, 'last_updated' : pd.Timestamp(self.update_time)}
+
 
 def filetype_checker(line):
     ######## Faltan los tipos de archivos partidos #########
@@ -50,6 +107,91 @@ def parse_links (url_body):
                 links.append([link, urllib.parse.unquote(split_line[1])])
     print (f"\nThe URL has been parsed, giving a total of {len(links)} files to download\n")
     return links
+
+def get_size_to_gb (file_size_string):
+    split_size  = file_size_string.split(' ')
+    match split_size[1]:
+        case 'B':
+            return float(split_size[0])/(1024*1024*1024)
+        case "KB":
+            return float(split_size[0])/(1024*1024)
+        case "KiB":
+            return float(split_size[0])/(1024*1024)
+        case 'MB':
+            return float(split_size[0])/1024
+        case 'MiB':
+            return float(split_size[0])/1024
+        case 'GB':
+            return float(split_size[0])
+        case 'GiB':
+            return float(split_size[0])
+        case 'TB':
+            return float(split_size[0])*1024
+        case 'TiB':
+            return float(split_size[0])*1024
+        case _:
+            return float(split_size[0])
+        
+
+def parse_sizes (url_body):
+    file_sizes = []
+    url_body_lines = url_body.split('\n')
+    url_body_lines = tqdm(iterable=url_body_lines, unit='Lines', desc='Parsing')
+    for line in url_body_lines:
+        if filetype_checker(line):
+            # split_line = line.split('href=', 1)
+            split_line = line.split('<td class="size">', 1)
+            if len(split_line) > 1:
+                split_line = split_line[1]
+                split_line = split_line.split('</td>', 1)
+                print(split_line)
+                file_size = get_size_to_gb(split_line[0])
+                file_sizes.append(file_size)
+    return file_sizes
+
+def get_file_name (line) -> str:
+    file_name = ''
+    split_line = line.split('href=', 1)
+    if len(split_line) > 1:
+        split_line = split_line[1]
+        split_line = split_line.split('\"', 2)
+        file_name = urllib.parse.unquote(split_line[1])
+    return file_name
+    
+def get_file_size (line) -> float:
+    file_size = 0
+    split_line = line.split('<td class="size">', 1)
+    if len(split_line) > 1:
+        split_line = split_line[1]
+        split_line = split_line.split('</td>', 1)
+        file_size = get_size_to_gb(split_line[0])
+    return file_size
+
+def get_update_time (line) -> datetime:
+    date = datetime.now()
+    split_line = line.split('<td class="date">', 1)
+    if len(split_line) > 1:
+        split_line = split_line[1]
+        split_line = split_line.split('</td>', 1)
+        date = datetime.strptime(split_line[0], '%d-%b-%Y %H:%M')
+    return date
+
+def parse_games (url_body, url, console) -> list[Game]:
+    games = []
+    url_body_lines = url_body.split('\n')
+    url_body_lines = tqdm(iterable=url_body_lines, unit='Lines', desc=f'Parsing {url}')
+    for line in url_body_lines:
+        if filetype_checker(line):
+            file_name = get_file_name(line)
+            file_size = get_file_size(line)
+            update_time = get_update_time(line)
+            if url[-1] == '/':
+                url_with_file = url + file_name
+            else:
+                url_with_file = url + '/' +  file_name
+            game = Game(name = file_name, url = url_with_file, size = file_size, update_time = update_time, console = console)
+            games.append(game)
+    return games
 
 def download_file_wget (url_with_file_name):
     url = url_with_file_name[0]
@@ -122,29 +264,43 @@ def personal_filter(links):
         del urls[count]
     return urls
 
+def personal_game_filter(games) -> list[Game]:
+    aux_games = games
+    to_filter = []
+    for count, game in enumerate(aux_games):
+        if personal_filter_restriction(game.name):
+            to_filter.append(count)
+    for count in reversed(to_filter):
+        del aux_games[count]
+    return aux_games
+
 def write_links(links, file_name='output.txt'):
     with open(file_name, 'w') as file:
         for link in links:
             file.write(link[0]+'\n')
 
-def get_file_size(link):
-    session = requests.Session()
-    retries = Retry(total=5,
-                backoff_factor=0.1,
-                status_forcelist=[ 500, 502, 503, 504 ])
-    adapter = HTTPAdapter(max_retries=retries)
-    session.mount(link[0], adapter)
-    response = session.head(link[0])
-    file_size = int(response.headers.get('content-length', 0))
-    return file_size
+################### GET FILE SIZE PER LINK ###################
 
-def get_files_size(links):
-    total_size = 0
-    # with Pool(MAX_PROCCESSES) as p:
-    #     p.map(get_file_size, link)
-    for link in links:
-            total_size += get_file_size(link)
-    print(f'The total size of the {len(links)} files is {(total_size/(1024*1024)):0.2f}MB aka {(total_size/(1024*1024*1024)):0.2f}GB')
+# def get_file_size(link):
+#     session = requests.Session()
+#     retries = Retry(total=5,
+#                 backoff_factor=0.1,
+#                 status_forcelist=[ 500, 502, 503, 504 ])
+#     adapter = HTTPAdapter(max_retries=retries)
+#     session.mount(link[0], adapter)
+#     response = session.head(link[0])
+#     file_size = int(response.headers.get('content-length', 0))
+#     return file_size
+
+################### GET FILE SIZE PER LINKs ###################
+# def get_files_size(links):
+#     total_size = 0
+#     # with Pool(MAX_PROCCESSES) as p:
+#     #     p.map(get_file_size, link)
+#     for link in links:
+#             total_size += get_file_size(link)
+#     print(f'The total size of the {len(links)} files is {(total_size/(1024*1024)):0.2f}MB aka {(total_size/(1024*1024*1024)):0.2f}GB')
+#     return total_size
 
 def iso2chd (file_name):
     path = os.path.abspath('')
@@ -162,6 +318,51 @@ def iso2chd (file_name):
 
 if __name__ == '__main__':
 
+    urls = [
+        ['https://myrient.erista.me/files/Redump/Sony%20-%20PlayStation/', 'PS1'],
+        ['https://myrient.erista.me/files/Redump/Sony%20-%20PlayStation%202/', 'PS2'],
+        ['https://myrient.erista.me/files/Redump/Sony%20-%20PlayStation%203/', 'PS3'],
+        ['https://myrient.erista.me/files/Redump/Sony%20-%20PlayStation%20Portable/', 'PSP'],
+        ['https://myrient.erista.me/files/Redump/Nintendo%20-%20GameCube%20-%20NKit%20RVZ%20%5Bzstd-19-128k%5D/', 'GameCube'],
+        ['https://myrient.erista.me/files/Redump/Nintendo%20-%20Wii%20-%20NKit%20RVZ%20%5Bzstd-19-128k%5D/', "Wii"],
+        ['https://myrient.erista.me/files/Redump/Nintendo%20-%20Wii%20U%20-%20WUX/', 'WiiU'],
+        ['https://myrient.erista.me/files/Redump/Sega%20-%20Dreamcast/', 'Dreamcast'],
+        ['https://myrient.erista.me/files/Redump/Sega%20-%20Saturn/', 'Saturn'],
+        ['https://myrient.erista.me/files/Redump/Microsoft%20-%20Xbox/', 'Xbox'],
+        ['https://myrient.erista.me/files/Redump/Microsoft%20-%20Xbox%20360/', 'Xbox360']
+    ]
+
+    consoles = []
+    every_games = []
+    for url in urls:
+        url_request = urllib.request.urlopen(url[0])
+        url_body = url_request.read().decode("utf-8")
+        games = parse_games(url_body, url[0], url[1])
+        games = personal_game_filter(games)
+        total_game_size = 0
+        for game in games:
+            total_game_size += game.size
+        every_games.append(games)
+        consoles.append([url[1], len(games), total_game_size])
+
+    df_dict = {}
+    for games in every_games:
+        df = pd.DataFrame([game.as_dict() for game in games])
+        print(df)
+        df_dict[games[0].console] = df
+    with pd.ExcelWriter('games.xlsx') as writer:
+        for console, df in df_dict.items():
+            df.to_excel(writer, sheet_name=console, index=False)
+
+    total = 0
+    with open('files_to_download.txt', 'w') as file:
+        for console in consoles:
+            file.write(f'{console[0]} - {console[1]} files - {console[2]:0.2f}GBs\n')
+            total += console[2]
+        file.write(f'Total space needed for the consoles = {total:0.2f}GBs')
+
+
+
     url = urllib.request.urlopen("https://myrient.erista.me/files/Redump/Sony%20-%20PlayStation%202")
     url_body = url.read().decode("utf-8")
 
@@ -173,9 +374,9 @@ if __name__ == '__main__':
     if file_output:
         write_links(links, file_name=file_name)
     
-    total_files = False
-    if total_files:
-        get_files_size(links)
+    # total_files = False
+    # if total_files:
+    #     get_files_size(links)
 
     # ##### Auto Download ######
 
@@ -204,11 +405,9 @@ if __name__ == '__main__':
     # download_file(params[2][0], params[2][1])
     # iso2chd(params[2][0][1])
 
-    print(params2)
-
-    with Pool(MAX_PROCCESSES) as p:
+    # with Pool(MAX_PROCCESSES) as p:
         # p.starmap(download_file, params)
-        p.map(iso2chd, params2)
+        # p.map(iso2chd, params2)
 
 
 
